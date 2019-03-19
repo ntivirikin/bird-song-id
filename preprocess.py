@@ -8,6 +8,7 @@ import random
 import numpy
 from datetime import datetime
 from matplotlib import pyplot
+import pandas
 
 
 # Print error messages
@@ -52,8 +53,7 @@ def expand_ones(keep_cell):
 # expand_one        Boolean, if True will apply the expand_by_one function
 # drop_zero         Boolean, if True will apply zero cell elimination function
 #
-# Returns:
-#
+# Return values:
 # unfilt_spec       Raw spectrogram array
 # filt_spec         Filtered spectrogram array
 def audio_spectro(data, expand_one = False, drop_zero = 0.95):
@@ -127,57 +127,96 @@ def process_wav(path, filenames, filt=False):
     return data
 
 
-# Not sure if below is needed, keep for later
-'''
-# Sorts each species into a training, testing, and validating set
-# TODO: Optimize this with set or bisect (needed?)
-def create_struc(path):
-    file_list = os.scandir(path)
-    species_list = []
-    fold_path = os.getcwd() + '/test_data/'
+# Creates training data from list of spectrograms
+#
+# Parameters:
+# spec_list			Generated spectrogram list
+# labels		Class label list
+# N			    (1*44100)/(1024-512)=86
+# filenames		Filename
+# class_ids		ClassID
+#
+# Return values:
+# X			    Input
+# y			    Output
+# filen			Filename
+# c_id			ClassID
+# TODO: Create function to load metadata from json
+def process_spec(spec_list, N, labels = None, filenames = None, class_ids = None):
 
-    for files in file_list:
-       rec = files.name
-       temp = rec.split('_')
-       species = temp[0]
-       if species not in species_list:
-           species_list.append(species)
+    rows	= len(spec_list[0])
+    X		= numpy.empty((0, 1, rows, N))
+    y		= []
+    filen 	= []
+    c_id	= []
+
+    for i in range(len(spec_list)):
+        ranges = numpy.hstack((numpy.arange(0, len(spec_list[i][0]), N), len(spec_list[i][0])))
+
+        for j in range(len(ranges) - 1):
+            temp_spec = numpy.empty((1, rows, N))
+
+            # Perform zero-padding if spectrogram is shorter than desired window length
+            if (len(spec_list[i][0]) < N): 
+            
+                temp_spec[0] = numpy.hstack((spec_list[i], numpy.zeros((rows, N - len(spec_list[i][0])))))
+            
+            # Check if it is the last element
+            elif (ranges[j + 1] - ranges[j] < N):
+                temp_spec[0] = spec_list[i][:, -N:]
+            else:
+                temp_spec[0] = spec_list[i][:, ranges[j]:ranges[j + 1]]
+
+            X = numpy.vstack((X, [temp_spec]))
+
+            # Appending metadata to output lists
+            if labels is not None:
+                y.append(labels[i])
+            if filenames is not None:
+                filen.append(filenames[i])
+            if class_ids is not None:
+                c_id.append(class_ids[i])
+    return X, y, filen, c_id
 
 
-    for fold in species_list:
-        make_path = fold_path + fold
-        create_dir(make_path)
-        create_dir(make_path + '/temp/')
-        create_dir(make_path + '/temp/' + fold)
-        create_dir(make_path + '/train/')
-        create_dir(make_path + '/test/')
-        create_dir(make_path + '/validate/')
+# Calculates the standard scalar coefficient of the input data for 0 mean and 1 variance
+#
+# Parameters:
+# num_files 		the number of files to process (we assume that the mean and variance 
+#                   will be similar in case of a subset of the training data and we don't
+#                   have to process the whole database)
+# wavdirpath		the path that contains the wavs (sampled at 16kHz)
+# xmlpicklepath		the path and filename that contains the XML file for training (xml_data.pickle)
+#
+# Return values:
+# scalar
+# spectogramData
+# TODO: Replace xml with json
+def gen_scalar(wav_path, json_path, dirroot_path, num_files = 100):
+    create_dir(dirroot_path)
 
+    # Reading metadata with Pickle
+    import pickle
+    df = pandas.read_pickle(json_path)
 
-def sort_rec(species_list, path, train = 0.6, test = 0.2, validate = 0.2):
-    file_list = os.scandir(path)
-    for files in file_list:
-        rec = files.name
-        temp = rec.split('_')
-        struct = temp[0]
-        
-        for species in species_list:
-            if struct == species:
-                shutil.move(files.path,os.getcwd() +  '/temp/' + species)
-    file_list.close()
+    # Shuffle rows
+    df = df.iloc[numpy.random.permutation(len(df))]
+    df.reset_index(drop = True, inplace = True)
+    
+    # Calculate spectograms
+    spec_data = process_wav(wav_path, df.FileName[:num_files], filt = False)
 
-    temp_list = os.scandir(os.getcwd() + '/temp' + species)
+    from sklearn.preprocessing import StandardScaler
+    scalar = StandardScaler()
 
-    for files in temp_list:
-        num = random.randint(1,11)
-        if num in range(1, (train * 10) + 1):
-            # Move to train
-            return None
-        elif num in range(7, 9):
-            # Move to test
-            return None
-        elif num in range (9, 11):
-            # Move to validate
-            return None
-    temp_list.close()
-'''
+    # Calculate scalar for each spectrogram
+    for s_data in spec_data:
+        scalar.partial_fit(s_data.reshape(-1, 1))
+
+    # filename where we save the scaler
+    save_to = os.path.join(dirroot_path, "standardScaler_{}.pickle".format(num_files))
+    from sklearn.externals import joblib
+    pickle.dump(scalar, open(save_to, 'wb'))
+    print('Scaler saved to: {}'.format(save_to))
+    
+    return scalar, spec_data
