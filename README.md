@@ -10,6 +10,6 @@ In: Working Notes of Conference and Labs of the Evaluation Forum, Évora, Portug
 
 GitHub link: [https://github.com/bapalto/birdsong-keras/](https://github.com/bapalto/birdsong-keras/)
 
-This model interprets JSON files for recording metadata rather than XML files provided in typical bird vocalization data sets used in machine learning competitions. To aid in data collection, I created an API wrapper for the xeno-canto.org recording database to retrieve JSON metadata and MP3 recordings based on user search criteria.
+To aid in data collection, I created an API wrapper for the xeno-canto.org recording database to retrieve JSON metadata and MP3 recordings based on user search criteria.
 
 GitHub link: [https://github.com/ntivirikin/xeno-canto-py](https://github.com/ntivirikin/xeno-canto-py)
