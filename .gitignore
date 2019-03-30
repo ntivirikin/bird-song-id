@@ -5,3 +5,5 @@
 /data/input/*
 /__pycache__
 scratchpad.py
+metadata.json
+runner.py

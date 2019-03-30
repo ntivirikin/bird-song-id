@@ -9,6 +9,7 @@ import numpy
 from datetime import datetime
 from matplotlib import pyplot
 import pandas
+import json
 
 
 # Print error messages
@@ -26,6 +27,26 @@ def create_dir(directory):
         if e.errno != errno.EEXIST:
             err_log(e)
             raise
+
+
+# Loads metadata as a pandas dataframe
+def load_meta(path='metadata.json'):
+    open_t = open(path)
+    data = json.load(open_t)
+    id, species = [], []
+    for result in data['data']:
+        id.append(result['id'])
+        species.append(result['species'])
+    df = pandas.DataFrame([id, species]).T
+    return df
+
+
+# Generate one-hot encoding for metadata
+def ohot_encode(df, label):
+    from sklearn.preprocessing import LabelBinarizer
+    lb = LabelBinarizer()
+    lb.fit(df[label])
+    return (lb, lb.transform(df[label]))
 
 
 # Convert .mp3 to .wav files with desired sample rate
