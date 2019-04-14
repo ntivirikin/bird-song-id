@@ -1,6 +1,6 @@
-# bird-song-id
+# chirpr-processor
 
-Identifies bird species based on recordings of vocalizations
+Processes bird vocalization recordings and respective metadata for ingestion into machine learning models
 
 Much credit is owed to Dr. Czeba and Dr. Tóth for their work on bird song classification for the BirdCLEF 2016 competition. An enormous part of this project is based entirely on their work here:
 
