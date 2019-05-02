@@ -10,6 +10,7 @@ from datetime import datetime
 from matplotlib import pyplot
 import pandas
 import json
+import h5py
 
 
 # Print error messages
@@ -32,12 +33,7 @@ def create_dir(directory):
 # Loads metadata as a pandas dataframe
 def load_meta(path='metadata.json'):
     open_t = open(path)
-    data = json.load(open_t)
-    id, species = [], []
-    for result in data['data']:
-        id.append(result['id'])
-        species.append(result['species'])
-    df = pandas.DataFrame([id, species]).T
+    df = pandas.read_json(open_t, orient='columns')
     return df
 
 
@@ -83,7 +79,7 @@ def audio_spectro(data, expand_one = False, drop_zero = 0.95):
     raw_spec = numpy.log10(pyplot.specgram(data, NFFT=512, noverlap=256, Fs=16000)[0])
 
     # Cut off high frequencies
-    # TODO: This needs to be tailored to each recording
+    # TODO: This needs to be tailored to the dataset
     temp_spec = raw_spec[0:200,:]
     filter_spec = numpy.copy(temp_spec)
 
@@ -151,7 +147,7 @@ def process_wav(path, filenames, filt=False):
 # Creates training data from list of spectrograms
 #
 # Parameters:
-# spec_list			Generated spectrogram list
+# spec_list		Generated spectrogram list
 # labels		Class label list
 # N			    (1*44100)/(1024-512)=86
 # filenames		Filename
@@ -162,7 +158,7 @@ def process_wav(path, filenames, filt=False):
 # y			    Output
 # filen			Filename
 # c_id			ClassID
-# TODO: Create function to load metadata from json
+# TODO: Determine if class id's are required
 def process_spec(spec_list, N, labels = None, filenames = None, class_ids = None):
 
     rows	= len(spec_list[0])
@@ -212,13 +208,12 @@ def process_spec(spec_list, N, labels = None, filenames = None, class_ids = None
 # Return values:
 # scalar
 # spectogramData
-# TODO: Replace xml with json
+# TODO: Determine how to save scalars (Pickle, json, etc.)
 def gen_scalar(wav_path, json_path, dirroot_path, num_files = 100):
     create_dir(dirroot_path)
 
     # Reading metadata with Pickle
-    import pickle
-    df = pandas.read_pickle(json_path)
+    df = load_meta()
 
     # Shuffle rows
     df = df.iloc[numpy.random.permutation(len(df))]
@@ -237,7 +232,43 @@ def gen_scalar(wav_path, json_path, dirroot_path, num_files = 100):
     # filename where we save the scaler
     save_to = os.path.join(dirroot_path, "standardScaler_{}.pickle".format(num_files))
     from sklearn.externals import joblib
+    import pickle
     pickle.dump(scalar, open(save_to, 'wb'))
     print('Scaler saved to: {}'.format(save_to))
     
     return scalar, spec_data
+
+
+# Constructs training data from recordings and metadata
+#
+# Parameters:
+# wav_dir       Path to WAV recordings
+# json_path     Path to JSON metadata file
+# save_path     Path to save training data
+#
+# Returns:
+#
+# X, y, fn      For debugging if required
+def gen_training(wav_dir, json_path=os.getcwd() + '/metadata.json', save_path=os.getcwd() + '/training/'):
+    create_dir(save_path)
+    # Setting some required variables
+    # TODO: Grab these from the spectrogram processing, remove N entirely (process all classes in recordings)
+    N = 100
+    spectrogram_height = 100
+    spectrogram_window_length = 100
+
+    f = h5py.File(os.path.join(save_path,"data_top{}_nozero.hdf5".format(N)), "w")
+    dsetX	= f.create_dataset('X', (0,1,spectrogram_height,spectrogram_window_length), maxshape=(None, 1,spectrogram_height,spectrogram_window_length))
+    dsety	= f.create_dataset('y', (0,N), maxshape=(None,N))
+
+    # Load json metadata
+    df = load_meta()
+
+    # Shuffle rows
+    df = df.iloc[numpy.random.permutation(len(df))]
+    df.reset_index(drop=True, inplace=True)
+
+    # Generating one-hot labels
+    (lb, binary_labels) = ohot_encode(df, "species")
+    import pickle
+    pickle.dump(lb, open(os.path.join(save_path,"labelBinarizer_top{}.pickle".format(N)), 'wb'))
